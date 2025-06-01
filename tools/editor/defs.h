@@ -20,7 +20,6 @@
 
 #define EDITOR_TOOL_HEIGHT 25
 
-#define MAX_ASSET_FILES 500
 #define MAX_FILENAME 256
 
 #define LAYERS 3

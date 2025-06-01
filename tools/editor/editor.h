@@ -5,6 +5,7 @@
 #include "tilemap.h"
 #include "defs.h"
 #include "../../engine/asset_manager.h"
+#include "../../engine/entity.h"
 
 typedef struct {
   char *paths[MAX_ASSET_FILES];
@@ -17,6 +18,11 @@ typedef struct {
   int render_layer_1;
   int render_layer_2;
   int render_layer_3;
+  int is_entity;
+  int frame_count;
+  int frame_columns;
+  int frame_rows;
+  float frame_duration;
 } EditorSettings;
 
 typedef struct {
@@ -96,9 +102,12 @@ typedef struct {
 void init_editor(Editor* e);
 void cleanup_editor(Editor* e);
 void render_grid(SDL_Renderer* renderer, int offset_x, int offset_y, float scale);
-void render_editor_win(Editor* e);
+void render_editor_win(Editor* e, float delta_time);
 void render_tilesheet_win(Editor* e);
 void render_settings_win(Editor* e);
 void handle_settings_input(SDL_Event* e, Editor* editor);
+void editor_nk_input_begin(Editor* editor);
+void editor_nk_input_end(Editor* editor);
+void update_editor_entities(Editor* editor, float delta_time);
 
 #endif

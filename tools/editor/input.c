@@ -1,4 +1,5 @@
 #include "input.h"
+#include "../../engine/entity.h"
 #include "../../engine/logger/logger.h"
 #include "../../vendor/nuklear.h"
 #include "../../vendor/nuklear_sdl_renderer.h"
@@ -8,6 +9,8 @@ static void handle_any_input(SDL_Event *e, Editor *editor);
 static void handle_editor_input(SDL_Event *e, Editor *editor);
 static void handle_tilesheet_input(SDL_Event *e, Editor *editor);
 static void handle_mousewheel(SDL_Event *e, ZoomState *z);
+static void handle_editor_tile_draw(Editor *editor, int x, int y);
+static void handle_editor_ent_draw(Editor *editor, int x, int y);
 
 void handle_input(SDL_Event *e, Editor *editor) {
   if (e->type == SDL_QUIT) {
@@ -49,42 +52,52 @@ static void handle_editor_input(SDL_Event *e, Editor *editor) {
 
   case SDL_MOUSEBUTTONDOWN: {
     int x, y;
-    SDL_GetMouseState(&editor->e_mouse.click_x, &editor->e_mouse.click_y);
 
-    screen_to_world(editor->e_w, editor->e_h, editor->e_zoom.offset_x,
-                    editor->e_zoom.offset_y, editor->e_zoom.scale,
-                    editor->e_mouse.click_x, editor->e_mouse.click_y, &x, &y);
+    if (e->button.button == SDL_BUTTON_LEFT) {
+      editor->e_mouse.left_pressed = 1;
 
-    editor->e_mouse.click_x = x;
-    editor->e_mouse.click_y = y;
+      if (editor->settings.is_entity) {
+        handle_editor_ent_draw(editor, x, y);
+      } else {
+        handle_editor_tile_draw(editor, x, y);
+      }
+    } else if (e->button.button == SDL_BUTTON_RIGHT) {
+      GINFO("right mouse clicked");
+      editor->e_mouse.right_pressed = 1;
+      SDL_GetMouseState(&editor->e_mouse.click_x, &editor->e_mouse.click_y);
 
-    SDL_Rect dest = {
-        snap_to_grid(editor->e_mouse.click_x, editor->e_zoom.scale),
-        snap_to_grid(editor->e_mouse.click_y, editor->e_zoom.scale),
-        editor->select_buf.rect.w, editor->select_buf.rect.h};
+      screen_to_world(editor->e_w, editor->e_h, editor->e_zoom.offset_x,
+                      editor->e_zoom.offset_y, editor->e_zoom.scale,
+                      editor->e_mouse.click_x, editor->e_mouse.click_y, &x, &y);
 
-    GINFO("dest rect: x: %d, y: %d, w: %d, h: %d", editor->e_mouse.click_x,
-          editor->e_mouse.click_y, editor->select_buf.rect.w,
-          editor->select_buf.rect.h);
+      editor->e_mouse.click_x = x;
+      editor->e_mouse.click_y = y;
 
-    RenderTile tile = {.layer = editor->settings.layer,
-                       .src = editor->select_buf.rect,
-                       .dest = dest,
-                       .tilesheet =
-                           editor->d_asset_dir.paths[editor->cur_sheet_index]};
-
-    add_render_tile(&editor->tile_map->render_layers[editor->settings.layer],
-                    tile);
+      remove_tile(&editor->tile_map->render_layers[editor->settings.layer], x, y);
+      remove_ent(&editor->tile_map->render_layers[editor->settings.layer], x, y);
+    }
 
     break;
   }
 
-  case SDL_MOUSEMOTION:
+  case SDL_MOUSEMOTION: {
     SDL_GetMouseState(&editor->e_mouse.x, &editor->e_mouse.y);
 
-    break;
+    if (editor->e_mouse.left_pressed && editor->select_buf.active_selection) {
+      int x, y;
+      if (editor->settings.is_entity) {
+        handle_editor_ent_draw(editor, x, y);
+      } else {
+        handle_editor_tile_draw(editor, x, y);
+      }
+    }
+  }
+
+  break;
 
   case SDL_MOUSEBUTTONUP:
+
+    // RESET MOUSE STATE
     if (e->button.button == SDL_BUTTON_LEFT) {
       editor->e_mouse.left_pressed = 0;
     } else if (e->button.button == SDL_BUTTON_MIDDLE) {
@@ -213,4 +226,60 @@ static void handle_mousewheel(SDL_Event *e, ZoomState *z) {
     SDL_GetMouseState(&x, &y);
     apply_zoom(z, new_scale, x, y);
   }
+}
+
+static void handle_editor_tile_draw(Editor *editor, int x, int y) {
+  SDL_GetMouseState(&editor->e_mouse.click_x, &editor->e_mouse.click_y);
+
+  screen_to_world(editor->e_w, editor->e_h, editor->e_zoom.offset_x,
+                  editor->e_zoom.offset_y, editor->e_zoom.scale,
+                  editor->e_mouse.click_x, editor->e_mouse.click_y, &x, &y);
+
+  editor->e_mouse.click_x = x;
+  editor->e_mouse.click_y = y;
+
+  SDL_Rect dest = {snap_to_grid(editor->e_mouse.click_x, editor->e_zoom.scale),
+                   snap_to_grid(editor->e_mouse.click_y, editor->e_zoom.scale),
+                   editor->select_buf.rect.w, editor->select_buf.rect.h};
+
+  GINFO("dest rect: x: %d, y: %d, w: %d, h: %d", editor->e_mouse.click_x,
+        editor->e_mouse.click_y, editor->select_buf.rect.w,
+        editor->select_buf.rect.h);
+
+  RenderTile tile = {.layer = editor->settings.layer,
+                     .src = editor->select_buf.rect,
+                     .dest = dest,
+                     .tilesheet =
+                         editor->d_asset_dir.paths[editor->cur_sheet_index]};
+
+  add_render_tile(&editor->tile_map->render_layers[editor->settings.layer],
+                  tile);
+}
+
+static void handle_editor_ent_draw(Editor *editor, int x, int y) {
+  SDL_GetMouseState(&editor->e_mouse.click_x, &editor->e_mouse.click_y);
+
+  screen_to_world(editor->e_w, editor->e_h, editor->e_zoom.offset_x,
+                  editor->e_zoom.offset_y, editor->e_zoom.scale,
+                  editor->e_mouse.click_x, editor->e_mouse.click_y, &x, &y);
+
+  editor->e_mouse.click_x = x;
+  editor->e_mouse.click_y = y;
+
+  SDL_Rect dest = {snap_to_grid(editor->e_mouse.click_x, editor->e_zoom.scale),
+                   snap_to_grid(editor->e_mouse.click_y, editor->e_zoom.scale),
+                   editor->select_buf.rect.w / editor->settings.frame_columns,
+                   editor->select_buf.rect.h / editor->settings.frame_rows};
+
+  GINFO("dest rect: x: %d, y: %d, w: %d, h: %d", editor->e_mouse.click_x,
+        editor->e_mouse.click_y,
+        editor->select_buf.rect.w / editor->settings.frame_columns,
+        editor->select_buf.rect.h / editor->settings.frame_rows);
+
+  Entity *ent = create_entity(
+      editor->d_asset_dir.paths[editor->cur_sheet_index],
+      editor->select_buf.rect, editor->settings.frame_rows,
+      editor->settings.frame_columns, editor->settings.frame_duration, dest);
+
+  add_render_ent(&editor->tile_map->render_layers[editor->settings.layer], ent);
 }
